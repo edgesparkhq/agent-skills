@@ -89,6 +89,10 @@ Traps:
 - destroy the mounted UI on unmount
 - use `client.auth` for custom forms instead of manually wiring platform auth endpoints
 
+For managed auth appearance and theming rules, read
+[auth-patterns.md](auth-patterns.md#web-side-auth) instead of duplicating the
+contract here.
+
 ## Route / Session Guard Pattern
 
 Use `onSessionChange()` for app-level auth state and `requireSession()` when a flow should hard-fail if unauthenticated.
