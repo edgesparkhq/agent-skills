@@ -14,6 +14,7 @@ Auth endpoints live under `/api/_es/auth/` — this is a platform-managed prefix
 - [Callback URL](#callback-url)
 - [Server-Side Auth](#server-side-auth)
 - [Web-Side Auth](#web-side-auth)
+- [Google One Tap](#google-one-tap)
 
 ## Auth Config File
 
@@ -122,6 +123,7 @@ app.get("/api/public/feed", (c) => {
 Use `@edgespark/web` for all browser auth flows.
 
 - Prefer `authUI.mount()` for managed login UI.
+- For managed UI theming, use the `appearance` option with built-in `theme` presets and documented appearance variables.
 - For custom or headless flows, use `client.auth` directly. Its surface is Better Auth-compatible with EdgeSpark-specific additions like `requireSession()` and `onSessionChange()`.
 - Do not implement app auth by calling `/api/_es/auth/*` endpoints manually.
 - Raw `/api/_es/auth/*` endpoints are platform-managed and useful for debugging or verification, not normal browser app code.
@@ -138,6 +140,33 @@ const ui = client.authUI.mount(container, {
 // cleanup: ui.destroy()
 ```
 
+Managed auth theming example:
+
+```ts
+import {
+  AUTH_UI_APPEARANCE_VARIABLE,
+  AUTH_UI_THEME,
+} from "@edgespark/web";
+
+client.authUI.mount(container, {
+  redirectTo: "/dashboard",
+  appearance: {
+    theme: AUTH_UI_THEME.DARK,
+    variables: {
+      [AUTH_UI_APPEARANCE_VARIABLE.PRIMARY]: "#d97d4a",
+    },
+  },
+});
+```
+
+Notes:
+
+- use `AUTH_UI_THEME` and `AUTH_UI_APPEARANCE_VARIABLE` constants instead of handwritten strings
+- do not tell users to edit SDK CSS for routine managed auth light/dark or brand theming
+- `className` is only a root CSS hook, not a typed design-token surface
+- if the appearance object is first assigned to a variable, prefer `satisfies AuthUIAppearance` for stricter TypeScript checking
+- if the app needs full UI ownership rather than constrained theming, switch to headless `client.auth`
+
 For programmatic OAuth sign-in:
 
 ```ts
@@ -150,3 +179,29 @@ await client.auth.signIn.social({
 The managed auth UI picks up enabled providers automatically — no frontend changes needed when you add a new OAuth provider via the YAML config. Enable a provider in the YAML, apply, deploy, and the login page shows the new OAuth button. This is the declarative model: configure in YAML, not in code.
 
 Important: `edgespark secret set` prints a secure URL. The human must open it in a browser to enter the secret value. Secret values never pass through CLI, agent context, or LLM API calls. Always show the URL to the user and tell them to complete the step in the browser.
+
+## Google One Tap
+
+`client.authUI.promptGoogleOneTap()` triggers Google's page-load prompt. Calling the function is the opt-in — no YAML flag, no `mount()` option, nothing else turns it on.
+
+Requires Google fully configured per [Adding an OAuth Provider](#adding-an-oauth-provider). If credentials don't resolve server-side, the call is a no-op with a `console.error`.
+
+```tsx
+useEffect(() => {
+  if (session) return;
+  const prompt = client.authUI.promptGoogleOneTap({
+    onUnavailable: () => setShowGoogleButton(true), // fall back to regular OAuth button
+  });
+  return () => prompt.cancel();
+}, [session]);
+```
+
+Full options surface is `{ onSuccess?, onError?, onUnavailable? }`. After sign-in, `client.auth.onSessionChange` fires with the new session — same as every other auth method.
+
+Traps:
+
+- Use `onSessionChange` for app state. Duplicating into `onSuccess` causes drift between One Tap and other sign-in flows.
+- Wire `onUnavailable` to the fallback button — it fires on FedCM cooldown, no Google accounts, dismissal, *and* when the GIS script is blocked (ad blocker / CSP). Don't use `onError` for fallback; that's for credential-exchange or server failures. Fallback handler calls `client.auth.signIn.social({ provider: "google" })`.
+- `autoSelect`, `context`, `reason` enums, retry, `timeoutMs`, `container` aren't options. Surface is intentionally minimal.
+- Always return `prompt.cancel()` from effect cleanup — otherwise `onSuccess` can fire on an unmounted component.
+- FedCM has a dismissal cooldown. Test in incognito when iterating, or the prompt silently stops appearing.

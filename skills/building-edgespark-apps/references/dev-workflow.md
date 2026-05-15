@@ -25,6 +25,7 @@ Default to these paths unless the user explicitly asks for a lower-level or debu
 - [Vars](#vars)
 - [Secrets](#secrets)
 - [Generated Types](#generated-types)
+- [Logs and Runtime Debugging](#logs-and-runtime-debugging)
 - [Deploy Preflight](#deploy-preflight)
 - [Deploy](#deploy)
 - [Recommended Order For Common Tasks](#recommended-order-for-common-tasks)
@@ -150,6 +151,28 @@ Rules:
 - do not edit generated files
 - do not trust scaffold placeholders as the final SDK contract
 - the CLI has staleness checks for SDK types; if types are stale, refresh them before coding or deploying
+
+## Logs and Runtime Debugging
+
+Default workflow:
+
+1. Create a local log directory when needed: `mkdir -p .logs`
+2. Start a background stream: `edgespark log tail > .logs/edgespark.log 2>&1 &`
+3. Trigger the request, auth flow, upload, or deploy step you are debugging
+4. Inspect `.logs/edgespark.log` between retries instead of staying attached to a long-running terminal stream
+
+Use this pattern when you need to debug:
+
+- request-time 500s
+- auth callback failures
+- storage upload/download errors
+- post-deploy runtime regressions
+
+Rules:
+
+- prefer a background log file over keeping the agent attached to a continuously streaming terminal session
+- read the log file after each repro attempt and summarize the concrete error before changing code
+- keep `edgespark` CLI commands sequential even when a background log stream is running
 
 ## Deploy Preflight
 
